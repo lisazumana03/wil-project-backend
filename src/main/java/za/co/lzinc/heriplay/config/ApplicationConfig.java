@@ -1,0 +1,56 @@
+package za.co.lzinc.heriplay.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.AuthenticationProvider;
+import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+
+import lombok.RequiredArgsConstructor;
+import za.co.lzinc.heriplay.repository.authentication.AuthenticationRepository;
+
+@Configuration
+@RequiredArgsConstructor
+public class ApplicationConfig {
+    private final AuthenticationRepository authenticationRepository;
+
+    @Bean
+    public UserDetailsService userDetailsService() {
+        return email -> authenticationRepository.findByEmail(email)
+                .map(user -> {
+                    // Convert user role to Spring Security authority with ROLE_ prefix
+                    org.springframework.security.core.authority.SimpleGrantedAuthority authority =
+                            new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_" + user.getRole());
+
+                    return new org.springframework.security.core.userdetails.User(
+                            user.getEmail(), // Use email for authentication
+                            user.getPassword(),
+                            java.util.Collections.singletonList(authority)
+                    );
+                })
+                .orElseThrow(() -> new UsernameNotFoundException("User not found with email: " + email));
+    }
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    public AuthenticationProvider authenticationProvider() {
+        DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();
+        authProvider.setUserDetailsService(userDetailsService());
+        authProvider.setPasswordEncoder(passwordEncoder());
+        return authProvider;
+    }
+
+    @Bean
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
+        return config.getAuthenticationManager();
+    }
+}
